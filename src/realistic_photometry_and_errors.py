@@ -18,6 +18,27 @@ from matplotlib.path import Path as MplPath
 #! SWITCHES
 do_plot = True
 
+#! Dictionary to deal with U+E column names to images.lis
+filter_dict = {
+    'HSC_G': 'HSC-G_DR3',
+    'HSC_R': 'HSC-R_DR3',
+    'HSC_I': 'HSC-I_DR3',
+    'HSC_NB0816': 'HSC-NB0816_DR3',
+    'HSC_Z': 'HSC-Z_DR3',
+    'HSC_NB0921': 'HSC-NB0921_DR3',
+    'HSC_Y': 'HSC-Y_DR3',
+    'IE': 'VIS',
+    'YE': 'Ye',
+    'JE': 'Je',
+    'HE': 'He',
+    'Y': 'Y',
+    'J': 'J',
+    'H': 'H',
+    'Ks': 'Ks',
+    'IRAC1': 'ch1cds',
+    'IRAC2': 'ch2cds'
+}
+
 def grid_depths(gridTable: dict, x: np.ndarray, y: np.ndarray, faster: bool = True, verbose: bool = False, nearby: bool = False) -> np.ndarray:
     ''' 
     Code to find the closest depth measurement from my previous analysis. Faster than truly local depths
@@ -127,8 +148,8 @@ footprint_dir = Path.cwd().parent / 'data' / 'footprints'
 data_dir = Path.cwd().parents[2] / 'data'
 depth_dir = Path.cwd().parents[2] / 'data' / 'depths'
 
-field_names = ['COSMOS', 'XMM']
-redshift_bins = ['z6', 'z7']
+field_names = ['COSMOS']
+redshift_bins = ['z7']
 
 # Dictionary of field names to candidate catalogues, with redshift keys inside for z6 and z7.
 catalogues = {'COSMOS': {'z6': cat_dir / 'COSMOS_5sig_HSC_Z_nonDet_HSC_G_nonDet_HSC_R_candidates_2025_06_06.fits', 
@@ -246,6 +267,7 @@ for field_name in field_names:
                 # Open the images.list file for this tile, and find the image for each filter, commented header
                 info = Table.read(data_dir / f'{field_name}{i+1}' / 'images.lis', format='ascii.commented_header')
 
+                good_filters = filters.copy()
                 for j, filt in enumerate(filters):
                     print(f'Processing filter {filt}')
 
@@ -253,6 +275,8 @@ for field_name in field_names:
                     img_row = info[info['Name'] == filt]
                     if len(img_row) == 0:
                         print(f'No image found for filter {filt} in {field_name} Tile {i+1}, skipping')
+                        # Remove this filter from the list of filters to process for this tile
+                        good_filters.remove(filt)
                         continue
 
                     img_path = img_row['directory'][0]
@@ -297,7 +321,7 @@ for field_name in field_names:
 
                     # Also plot errors from the catalogue, if they exist, for comparison
                     errors_cat = []
-                    for j, filt in enumerate(filters):
+                    for j, filt in enumerate(good_filters):
                         error_col = f'err_{filt}'
                         if error_col in cat_tile.colnames:
                             errors_cat.append(cat_tile[error_col])
@@ -325,6 +349,7 @@ for field_name in field_names:
             print(f'Found filters: {filters}')
 
             # create empty columns in full catalogue
+            good_filters = filters.copy()
             for filt in filters:
                 colname = f'err_real_{filt}'
                 if colname not in cat.colnames:
@@ -336,10 +361,16 @@ for field_name in field_names:
             for j, filt in enumerate(filters):
                 print(f'Processing filter {filt}')
 
+                if redshift_bin == 'z7':
+                    # Use the dict to convert from the U+E filter name to the image.lis name
+                    filter_name = filter_dict[filt]
+
                 # Find the image for this filter
-                img_row = info[info['Name'] == filt]
+                img_row = info[info['Name'] == filter_name]
                 if len(img_row) == 0:
-                    print(f'No image found for filter {filt} in {field_name}, skipping')
+                    print(f'No image found for filter {filter_name} in {field_name}, skipping')
+                    # Remove from good filters
+                    good_filters.remove(filt)
                     continue
 
                 img_path = img_row['directory'][0]
@@ -360,7 +391,7 @@ for field_name in field_names:
                 x, y = wcs.world_to_pixel_values(ra, dec)
 
                 # Get depth table for this filter
-                depth_table = Table.read(depth_dir / f'{field_name}' / 'phot' / f'{filt}_2.0as_gridDepths_300_200.fits')
+                depth_table = Table.read(depth_dir / f'{field_name}' / 'phot' / f'{filter_name}_2.0as_gridDepths_300_200.fits')
 
                 depths = grid_depths(depth_table, x, y)
 
@@ -385,7 +416,7 @@ for field_name in field_names:
 
                 # alSO plot positive errors from the catalogue, if they exist, for comparison
                 errors_cat = []
-                for j, filt in enumerate(filters):
+                for j, filt in enumerate(good_filters):
                     error_col = f'err_{filt}'
                     if error_col in cat.colnames:
                         errors_cat.append(cat[error_col])

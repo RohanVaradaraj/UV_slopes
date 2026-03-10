@@ -1,3 +1,6 @@
+# Ignore uv_slope results
+src/uv_slope_results_sn3_with_limits/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
